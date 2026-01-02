@@ -14,6 +14,7 @@ import { ClipboardModule } from 'ngx-clipboard'
 import { MatIconModule } from '@angular/material/icon'
 import { MatButtonModule } from '@angular/material/button'
 import { MatCardModule } from '@angular/material/card'
+import { MatTooltipModule } from '@angular/material/tooltip'
 import { LowerCasePipe } from '@angular/common'
 import { firstValueFrom } from 'rxjs'
 import { Router } from '@angular/router'
@@ -25,7 +26,6 @@ interface ChallengeSolvedNotification {
   country ?: {  code : string ,  name : string  }
   copied : boolean
   codingChallengeId ?: string
-  challengeName ?: string
 }
 
 @Component({
@@ -33,11 +33,12 @@ interface ChallengeSolvedNotification {
   templateUrl: './challenge-solved-notification.component.html',
   styleUrls: ['./challenge-solved-notification.component.scss'],
   standalone: true,
-  imports: [MatCardModule, MatButtonModule, MatIconModule, ClipboardModule, TranslateModule, LowerCasePipe]
+  imports: [MatCardModule, MatButtonModule, MatIconModule, MatTooltipModule, ClipboardModule, TranslateModule, LowerCasePipe]
 })
 export class ChallengeSolvedNotificationComponent implements OnInit {
   notifications: ChallengeSolvedNotification[] = []
   showCtfFlagsInNotifications = false
+  showCtfCountryDetailsInNotifications = 'none'
   private challengeService = inject(ChallengeService)
   private configurationService = inject(ConfigurationService)
   private ref = inject(ChangeDetectorRef)
@@ -63,7 +64,7 @@ export class ChallengeSolvedNotificationComponent implements OnInit {
               })
             )
 
-            const hasCodingChallenge = challengeComplete.codingChallenge !== undefined && challengeComplete.codingChallenge !== null
+            const hasCodingChallenge = challengeComplete.codingChallenge !== undefined
 
             const notification: ChallengeSolvedNotification = {
               key: challenge.key,
@@ -71,7 +72,6 @@ export class ChallengeSolvedNotificationComponent implements OnInit {
               flag: challenge.flag,
               country: countryInfo,
               copied: false,
-              challengeName: challengeComplete.name,
               codingChallengeId: hasCodingChallenge ? challenge.key : undefined
             }
 
@@ -85,7 +85,7 @@ export class ChallengeSolvedNotificationComponent implements OnInit {
     })
 
     this.socketIoService.on('notification', (data) => {
-      this.ngZone.run(async () => {
+      this.ngZone.run(() => {
         if (data?.message) {
           const notification: ChallengeSolvedNotification = {
             key: Math.random().toString(36).substr(2, 9),
@@ -101,6 +101,10 @@ export class ChallengeSolvedNotificationComponent implements OnInit {
 
     this.configurationService.getCtfFlagModeStatus().subscribe((result) => {
       this.showCtfFlagsInNotifications = result
+    })
+
+    this.configurationService.getShowCTFCountryDetailsInNotifications().subscribe((countryMode) => {
+      this.showCtfCountryDetailsInNotifications = countryMode
     })
   }
 
