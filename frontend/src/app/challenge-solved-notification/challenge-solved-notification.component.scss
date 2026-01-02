@@ -27,3 +27,17 @@ mat-card {
   display: inline-flex;
   vertical-align: middle;
 }
+
+
+// Coding Challenge Button Styling
+.coding-challenge-btn {
+  margin-left: 8px;
+  margin-right: 8px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+}
