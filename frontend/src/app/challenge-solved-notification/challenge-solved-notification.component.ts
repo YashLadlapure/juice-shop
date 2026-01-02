@@ -1,15 +1,14 @@
 /*
- * Copyright (c) 2014-2025 Bjoern Kimminich & the OWASP Juice Shop contributors.
+ * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.
  * SPDX-License-Identifier: MIT
  */
-
 import { TranslateService, TranslateModule } from '@ngx-translate/core'
-import { ChallengeService } from '../services/challenge.service'
-import { ConfigurationService } from '../services/configuration.service'
-import { ChangeDetectorRef, Component, NgZone, type OnInit, Inject } from '@angular/core'
-import { CookieService } from 'ngx-cookie-service'
-import { CountryMappingService } from '../services/country-mapping.service'
-import { SocketIoService } from '../services/socket-io.service'
+import { ChallengeService } from '../Services/challenge.service'
+import { ConfigurationService } from '../Services/configuration.service'
+import { ChangeDetectorRef, Component, NgZone, type OnInit, inject } from '@angular/core'
+import { CookieService } from 'ngy-cookie'
+import { CountryMappingService } from '../Services/country-mapping.service'
+import { SocketIoService } from '../Services/socket-io.service'
 import { ClipboardModule } from 'ngx-clipboard'
 import { MatIconModule } from '@angular/material/icon'
 import { MatButtonModule } from '@angular/material/button'
@@ -19,90 +18,127 @@ import { LowerCasePipe } from '@angular/common'
 import { firstValueFrom } from 'rxjs'
 import { Router } from '@angular/router'
 
+interface ChallengeSolvedMessage {
+  challenge: string
+  hidden?: any
+  isRestore?: any
+  flag: any
+  key?: any
+}
+
 interface ChallengeSolvedNotification {
   key: string
   message: string
   flag: string
-  copied: false
+  country?: { code: string, name: string }
+  copied: boolean
 }
 
 @Component({
   selector: 'app-challenge-solved-notification',
   templateUrl: './challenge-solved-notification.component.html',
   styleUrls: ['./challenge-solved-notification.component.scss'],
-  standalone: true,
-  imports: [
-    TranslateModule,
-    MatIconModule,
-    MatButtonModule,
-    MatCardModule,
-    MatTooltipModule,
-    ClipboardModule,
-    LowerCasePipe
-  ]
+  imports: [MatCardModule, MatButtonModule, MatIconModule, MatTooltipModule, ClipboardModule, LowerCasePipe, TranslateModule]
 })
 export class ChallengeSolvedNotificationComponent implements OnInit {
-  notifications: ChallengeSolvedNotification[] = []
-  showCtfFlagsInNotifications = false
-  showCTFCountryDetailsInNotifications = false
+  private readonly ngZone = inject(NgZone);
+  private readonly configurationService = inject(ConfigurationService);
+  private readonly challengeService = inject(ChallengeService);
+  private readonly countryMappingService = inject(CountryMappingService);
+  private readonly translate = inject(TranslateService);
+  private readonly cookieService = inject(CookieService);
+  private readonly ref = inject(ChangeDetectorRef);
+  private readonly io = inject(SocketIoService);
+  private readonly router = inject(Router);
+  public notifications: ChallengeSolvedNotification[] = []
+  public showCtfFlagsInNotifications = false
+  public showCtfCountryDetailsInNotifications = 'none'
+  public countryMap?: any
 
-  constructor(
-    private challengeService: ChallengeService,
-    private configurationService: ConfigurationService,
-    private ref: ChangeDetectorRef,
-    private ngZone: NgZone,
-    private socketIoService: SocketIoService,
-    private countryMappingService: CountryMappingService,
-    private translateService: TranslateService,
-    private cookieService: CookieService,
-    private router: Router
-  ) {}
-
-  ngOnInit() {
-    this.socketIoService.on('challengeSolved', (challenge) => {
-      this.ngZone.run(async () => {
-        try {
-          const solvedChallenge = await firstValueFrom(this.challengeService.getChallenge(challenge.key))
-          const challengeComplete = { ...challenge, ...solvedChallenge.data }
-          const countryInfo = this.countryMappingService.map(challengeComplete.country)
-          const notification: ChallengeSolvedNotification = {
-            key: challenge.key,
-            message: await firstValueFrom(
-              this.translateService.get('CHALLENGE_SOLVED', {
-                challenge: challengeComplete.name,
-                description: challengeComplete.description
-              })
-            ),
-            flag: '',
-            copied: false
+  ngOnInit (): void {
+    this.ngZone.runOutsideAngular(() => {
+      this.io.socket().on('challenge solved', (data: ChallengeSolvedMessage) => {
+        if (data?.challenge) {
+          if (!data.hidden) {
+            this.showNotification(data)
           }
-          this.notifications.unshift(notification)
-          this.ref.detectChanges()
-        } catch (error) {
-          console.error('Error processing challenge:', error)
+          if (!data.isRestore) {
+            this.saveProgress()
+            if (!data.hidden) {
+              import('../../confetti').then(module => {
+                module.shootConfetti()
+              })
+            }
+          }
+          this.io.socket().emit('notification received', data.flag)
         }
       })
     })
-
-    this.socketIoService.on('notification', (data) => {
-      this.ngZone.run(() => {
-        const notification: ChallengeSolvedNotification = {
-          key: data.key,
-          message: data.message,
-          flag: '',
-          copied: false
+    this.configurationService.getApplicationConfiguration().subscribe((config) => {
+      if (config?.ctf) {
+        if (config.ctf.showFlagsInNotifications) {
+          this.showCtfFlagsInNotifications = config.ctf.showFlagsInNotifications
+        } else {
+          this.showCtfFlagsInNotifications = false
         }
-        this.notifications.unshift(notification)
+        if (config.ctf.showCountryDetailsInNotifications) {
+          this.showCtfCountryDetailsInNotifications = config.ctf.showCountryDetailsInNotifications
+          if (config.ctf.showCountryDetailsInNotifications !== 'none') {
+            this.countryMappingService.getCountryMapping().subscribe({
+              next: (countryMap: any) => {
+                this.countryMap = countryMap
+              },
+              error: (err) => { console.log(err) }
+            })
+          }
+        } else {
+          this.showCtfCountryDetailsInNotifications = 'none'
+        }
+      }
+    })
+  }
+
+  closeNotification (index: number, shiftKey = false) {
+    if (shiftKey) {
+      this.ngZone.runOutsideAngular(() => {
+        this.io.socket().emit('verifyCloseNotificationsChallenge', this.notifications)
+      })
+      this.notifications = []
+    } else {
+      this.notifications.splice(index, 1)
+    }
+    this.ref.detectChanges()
+  }
+
+  showNotification (challenge: ChallengeSolvedMessage) {
+    firstValueFrom(this.translate.get('CHALLENGE_SOLVED', { challenge: challenge.challenge }))
+      .then((message) => {
+        let country
+        if (this.showCtfCountryDetailsInNotifications && this.showCtfCountryDetailsInNotifications !== 'none') {
+          country = this.countryMap[challenge.key]
+        }
+        this.notifications.push({
+          message,
+          key: challenge.key,
+          flag: challenge.flag,
+          country,
+          copied: false
+        })
         this.ref.detectChanges()
       })
-    })
+  }
 
-    this.configurationService.getCtfFlagModeStatus().subscribe((result) => {
-      this.showCtfFlagsInNotifications = result
-    })
-
-    this.configurationService.getShowCTFCountryDetailsInNotifications().subscribe((countryMode) => {
-      this.showCTFCountryDetailsInNotifications = countryMode
+  saveProgress () {
+    this.challengeService.continueCode().subscribe({
+      next: (continueCode) => {
+        if (!continueCode) {
+          throw (new Error('Received invalid continue code from the server!'))
+        }
+        const expires = new Date()
+        expires.setFullYear(expires.getFullYear() + 1)
+        this.cookieService.put('continueCode', continueCode, { expires })
+      },
+      error: (err) => { console.log(err) }
     })
   }
 
@@ -114,17 +150,5 @@ export class ChallengeSolvedNotificationComponent implements OnInit {
     this.router.navigate(['/score-board'], {
       queryParams: { codingChallenge: notification.key }
     })
-  }
-
-  closeNotification (index: number, shiftKey: boolean) {
-    if (shiftKey) {
-      this.notifications.splice(0)
-    } else {
-      this.notifications.splice(index, 1)
-    }
-  }
-
-  copyToClipBoard(text: string) {
-    this.cookieService.set('continueCode', text)
   }
 }
