@@ -10,32 +10,32 @@
         <div class="notificationMessage">{{ notification.message }}
           @if (hasCodingChallenge(notification)) {
             <br />
-            <div>
-              <span class="icon-box"><mat-icon>outlined_flag</mat-icon>
-              </span>&nbsp;
-              <button ngxClipboard mat-stroked-button [cbContent]="notification.flag" (cbOnSuccess)="notification.copied = true" [disabled]="!showCtfFlagsInNotifications">
-                <mat-icon>content_copy</mat-icon>
-              </button>
-              <span [hidden]="!notification.copied">{{ ('COPY_SUCCESS' | translate) }}</span>
-              <span [hidden]="notification.copied">{{ ('COPY_TO_CLIPBOARD' | translate) }}</span>
-            </div>
+            <button
+              mat-stroked-button
+              color="primary"
+              class="coding-challenge-btn"
+              (click)="openCodingChallenge(notification)"
+              matTooltip="Click to view the coding challenge">
+              🧑‍💻 Coding Challenge
+            </button>
           }
           <br />
           @if (showCtfCountryDetailsInNotifications !== 'none') {
             <span class="icon-box">
-              <mat-icon [hidden]="!showCtfCountryDetailsInNotifications === 'flag' || showCtfCountryDetailsInNotifications === 'both'" {{
-                notification.country.code | lowercase
-              }}"></mat-icon>
+              <mat-icon
+                [hidden]="!(showCtfCountryDetailsInNotifications === 'flag' || showCtfCountryDetailsInNotifications === 'both')"
+                [matTooltip]="notification.country?.name"
+                [ngxCountryFlagCode]="notification.country?.code | lowercase"></mat-icon>
             </span>
           }
-          <button
-            mat-stroked-button
-            color="primary"
-            class="coding-challenge-btn"
-            (click)="openCodingChallenge(notification)"
-            matTooltip="Click to view the coding challenge">
-            🧑‍💻 Coding Challenge
-          </button>
+          @if (showCtfFlagsInNotifications) {
+            <span class="icon-box"><mat-icon>outlined_flag</mat-icon></span>&nbsp;
+            <button ngxClipboard mat-stroked-button [cbContent]="notification.flag" (cbOnSuccess)="notification.copied = true">
+              <mat-icon>content_copy</mat-icon>
+            </button>
+            <span [hidden]="!notification.copied">{{ ('COPY_SUCCESS' | translate) }}</span>
+            <span [hidden]="notification.copied">{{ ('COPY_TO_CLIPBOARD' | translate) }}</span>
+          }
           <button
             id="closeButton"
             mat-button
